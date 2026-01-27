@@ -18,7 +18,10 @@
         "vite": "^7.0.7"
     },
     "dependencies": {
+        "@heroicons/vue": "^2.2.0",
         "@vitejs/plugin-vue": "^6.0.3",
-        "vue": "^3.5.26"
+        "dayjs": "^1.11.19",
+        "vue": "^3.5.26",
+        "vue-router": "^4.6.4"
     }
 }

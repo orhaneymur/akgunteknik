@@ -22,6 +22,9 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'role',
+        'warehouse_id',
+        'tenant_id'
     ];
 
     /**
@@ -45,5 +48,26 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    public function branch()
+    {
+        return $this->belongsTo(\Modules\Core\Models\Warehouse::class, 'warehouse_id');
+    }
+
+    public function isOwner()
+    {
+        // For now, tenant admin is owner. Later we might have super_admin for the platform.
+        return $this->role === 'owner';
+    }
+
+    public function isManager()
+    {
+        return $this->role === 'manager' || $this->isOwner();
+    }
+
+    public function isStaff()
+    {
+        return true; // Everyone is at least staff
     }
 }

@@ -2,10 +2,8 @@
 
 namespace Modules\Inventory\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Product extends Model
 {
@@ -16,32 +14,24 @@ class Product extends Model
         'name',
         'sku',
         'barcode',
-        'purchase_price',
-        'sale_price',
-        'tax_rate',
-        'compatibility',
+        'description',
+        'base_price',
         'is_active',
+        'cost_price'
     ];
 
-    protected $casts = [
-        'purchase_price' => 'decimal:2',
-        'sale_price' => 'decimal:2',
-        'tax_rate' => 'decimal:2',
-        'compatibility' => 'array',
-        'is_active' => 'boolean',
-    ];
-
-    /**
-     * Relationship: Product belongs to a tenant
-     * Note: Using DB facade since Core module doesn't have Tenant model yet
-     */
-
-    /**
-     * Relationship: Product has many inventory levels (stocks) across warehouses
-     */
-    public function stocks(): HasMany
+    public function inventoryMovements()
     {
-        return $this->hasMany(InventoryLevel::class, 'product_id');
+        return $this->hasMany(InventoryMovement::class);
+    }
+
+    public function compatibles()
+    {
+        return $this->belongsToMany(Product::class, 'product_compatibilities', 'product_id', 'compatible_id');
+    }
+
+    public function scopeTenant($query)
+    {
+        return $query->where('tenant_id', auth()->user()->tenant_id ?? null);
     }
 }
-
