@@ -2,15 +2,16 @@
 
 namespace Modules\Finance\Http\Controllers;
 
-use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Modules\Core\Http\Controllers\BaseController;
 use Modules\Finance\Models\Transaction;
 
-class TransactionController extends Controller
+class TransactionController extends BaseController
 {
     public function index(Request $request)
     {
-        $query = Transaction::with('safe');
+        $query = Transaction::with('safe')
+            ->where('tenant_id', $request->user()->tenant_id);
 
         if ($request->has('payable_type') && $request->has('payable_id')) {
             $query->where('payable_type', $request->payable_type)
@@ -21,7 +22,9 @@ class TransactionController extends Controller
             $query->where('safe_id', $request->safe_id);
         }
 
-        return $query->latest()->paginate(50);
+        $transactions = $query->latest()->paginate(50);
+
+        return $this->respondSuccess($transactions, 'Transactions retrieved successfully.');
     }
 
     public function store(Request $request)
@@ -51,13 +54,6 @@ class TransactionController extends Controller
             'date' => $request->transaction_date,
             'description' => $request->description . ($request->method ? " (Yöntem: {$request->method})" : ""),
         ]);
-            // We need a safe_id if it affects a safe?
-            // PaymentModal currently doesn't select a safe! 
-            // It just records the transaction on the account?
-            // "Ödeme Yöntemi" is "Nakit", "Havale" etc.
-            // But it doesn't ask "Hangi Kasa?".
-            // For now, let's leave safe_id nullable or generic.
-        ]);
 
         // If 'deposit' (collection from customer), Customer balance decreases (borç düşer / alacak artar?)
         // Actually Customer Balance = (Sales) - (Collections).
@@ -65,6 +61,6 @@ class TransactionController extends Controller
         // For simplicity, we just store transaction. 
         // Logic for balance calculation usually sums these up.
 
-        return response()->json(['success' => true, 'data' => $transaction], 201);
+        return $this->respondSuccess($transaction, 'Transaction created successfully.', 201);
     }
 }

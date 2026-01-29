@@ -18,15 +18,20 @@ use Modules\Core\Http\Controllers\ReportController;
 */
 
 Route::post('/core/login', [AuthController::class, 'login']);
+Route::middleware(['auth:sanctum'])->post('/core/logout', [AuthController::class, 'logout']);
 
 Route::middleware(['auth:sanctum'])->group(function () {
-    Route::get('/core/dashboard/stats', [DashboardController::class, 'index']);
-    Route::get('/core/reports/dashboard-stats', [ReportController::class, 'dashboardStats']);
-    Route::get('/core/reports/sales', [ReportController::class, 'salesReport']);
-    Route::get('/core/reports/stock', [ReportController::class, 'stockReport']);
+    // Genel dashboard ve raporlar - giriş yapmış tüm personel erişebilir (staff seviyesi)
+    Route::middleware('role:staff')->group(function () {
+        Route::get('/core/dashboard/stats', [DashboardController::class, 'index']);
+        Route::get('/core/reports/dashboard-stats', [ReportController::class, 'dashboardStats']);
+        Route::get('/core/reports/sales', [ReportController::class, 'salesReport']);
+        Route::get('/core/reports/stock', [ReportController::class, 'stockReport']);
+        Route::get('/core/warehouses', [WarehouseController::class, 'index']); // dropdownlar için
+    });
 
-    // Legacy dashboard route if needed, otherwise replace
-    // Route::get('/dashboard', ...); 
-    Route::apiResource('/core/users', UserController::class);
-    Route::get('/core/warehouses', [WarehouseController::class, 'index']); // Need this for dropdowns
+    // Kullanıcı yönetimi sadece tenant sahibi (owner) tarafından yapılabilir
+    Route::middleware('role:owner')->group(function () {
+        Route::apiResource('/core/users', UserController::class);
+    });
 });

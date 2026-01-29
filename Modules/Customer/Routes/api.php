@@ -4,5 +4,8 @@ use Illuminate\Support\Facades\Route;
 use Modules\Customer\Http\Controllers\CustomerController;
 
 Route::middleware(['auth:sanctum'])->group(function () {
-    Route::apiResource('customers', CustomerController::class);
+    // Müşteri/cari kart işlemleri: tüm personel (staff) erişebilir
+    Route::middleware('role:staff')->group(function () {
+        Route::apiResource('customers', CustomerController::class);
+    });
 });

@@ -5,7 +5,6 @@ namespace Modules\Core\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
@@ -20,16 +19,13 @@ class AuthController extends BaseController
      */
     public function login(Request $request): JsonResponse
     {
-        // Validate email and password
         $request->validate([
             'email' => 'required|email',
             'password' => 'required|string',
         ]);
 
-        // Find user by email
         $user = User::where('email', $request->email)->first();
 
-        // Check credentials
         if (!$user || !Hash::check($request->password, $user->password)) {
             return $this->respondError(
                 ['email' => ['The provided credentials are incorrect.']],
@@ -38,10 +34,8 @@ class AuthController extends BaseController
             );
         }
 
-        // Create token
         $token = $user->createToken('api-token')->plainTextToken;
 
-        // Return success response with token and user info
         return $this->respondSuccess(
             [
                 'token' => $token,
@@ -55,5 +49,18 @@ class AuthController extends BaseController
             'Login success'
         );
     }
-}
 
+    /**
+     * Logout current user by revoking the current access token.
+     */
+    public function logout(Request $request): JsonResponse
+    {
+        $token = $request->user()?->currentAccessToken();
+
+        if ($token) {
+            $token->delete();
+        }
+
+        return $this->respondSuccess(null, 'Logout success');
+    }
+}
