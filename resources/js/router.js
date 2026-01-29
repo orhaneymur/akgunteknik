@@ -136,6 +136,12 @@ const routes = [
                 component: () => import('./pages/inventory/SupplierList.vue')
             },
             {
+                path: 'suppliers/:id/statement',
+                name: 'SupplierStatement',
+                component: () => import('./pages/inventory/SupplierStatement.vue'),
+                props: true
+            },
+            {
                 path: 'purchase-orders',
                 name: 'PurchaseOrderList',
                 component: () => import('./pages/inventory/PurchaseOrderList.vue')
@@ -154,6 +160,21 @@ const routes = [
                 path: 'invoices/:id',
                 name: 'InvoiceView',
                 component: () => import('./pages/finance/InvoiceView.vue')
+            },
+            {
+                path: 'users',
+                name: 'UserList',
+                component: () => import('./pages/core/UserList.vue')
+            },
+            {
+                path: 'users/create',
+                name: 'UserCreate',
+                component: () => import('./pages/core/UserForm.vue')
+            },
+            {
+                path: 'users/:id/edit',
+                name: 'UserEdit',
+                component: () => import('./pages/core/UserForm.vue')
             }
         ]
     }

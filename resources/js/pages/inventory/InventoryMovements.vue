@@ -156,7 +156,7 @@ export default {
         async fetchProducts() {
              try {
                 const token = localStorage.getItem('token');
-                const response = await axios.get('/api/inventory/products', {
+                const response = await axios.get('/api/inventory/products?all=true', {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 if (response.data.success) {

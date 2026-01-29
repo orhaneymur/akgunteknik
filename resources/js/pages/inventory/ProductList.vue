@@ -57,7 +57,8 @@
                                         {{ product.is_active ? 'Aktif' : 'Pasif' }}
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                        <router-link :to="`/products/${product.id}/edit`" class="text-indigo-600 hover:text-indigo-900">Düzenle</router-link>
+                                        <router-link :to="`/products/${product.id}/edit`" class="text-indigo-600 hover:text-indigo-900 mr-4">Düzenle</router-link>
+                                        <button @click="deleteProduct(product.id)" class="text-red-600 hover:text-red-900">Sil</button>
                                     </td>
                                 </tr>
                                 <tr v-if="products.length === 0">
@@ -71,6 +72,47 @@
                 </div>
             </div>
         </div>
+
+        <!-- Pagination -->
+        <div class="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6 mt-4" v-if="pagination.total > 0">
+            <div class="flex flex-1 justify-between sm:hidden">
+                <button @click="changePage(pagination.current_page - 1)" :disabled="!pagination.prev_page_url" class="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50" :class="{'opacity-50 cursor-not-allowed': !pagination.prev_page_url}">
+                    Önceki
+                </button>
+                <button @click="changePage(pagination.current_page + 1)" :disabled="!pagination.next_page_url" class="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50" :class="{'opacity-50 cursor-not-allowed': !pagination.next_page_url}">
+                    Sonraki
+                </button>
+            </div>
+            <div class="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+                <div>
+                    <p class="text-sm text-gray-700">
+                        Toplam <span class="font-medium">{{ pagination.total }}</span> üründen <span class="font-medium">{{ pagination.from }}</span> ile <span class="font-medium">{{ pagination.to }}</span> arası gösteriliyor.
+                    </p>
+                </div>
+                <div>
+                    <nav class="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+                        <button @click="changePage(pagination.current_page - 1)" :disabled="!pagination.prev_page_url" class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" :class="{'opacity-50 cursor-not-allowed': !pagination.prev_page_url}">
+                            <span class="sr-only">Önceki</span>
+                            <svg class="size-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                <path fill-rule="evenodd" d="M11.78 5.22a.75.75 0 0 1 0 1.06L8.06 10l3.72 3.72a.75.75 0 1 1-1.06 1.06l-4.25-4.25a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                        
+                        <!-- Simple Page Display -->
+                        <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 focus:outline-offset-0">
+                            Sayfa {{ pagination.current_page }} / {{ pagination.last_page }}
+                        </span>
+
+                        <button @click="changePage(pagination.current_page + 1)" :disabled="!pagination.next_page_url" class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" :class="{'opacity-50 cursor-not-allowed': !pagination.next_page_url}">
+                            <span class="sr-only">Sonraki</span>
+                            <svg class="size-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                <path fill-rule="evenodd" d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                    </nav>
+                </div>
+            </div>
+        </div>
     </div>
 </template>
 
@@ -80,23 +122,49 @@ import axios from 'axios';
 export default {
     data() {
         return {
-            products: []
+            products: [],
+            pagination: {
+                current_page: 1,
+                last_page: 1,
+                prev_page_url: null,
+                next_page_url: null,
+                total: 0,
+                from: 0,
+                to: 0
+            }
         }
     },
     mounted() {
         this.fetchProducts();
     },
     methods: {
-        async fetchProducts() {
+        async deleteProduct(id) {
+            if (confirm('DİKKAT: Bu ürünü silerseniz, ürüne ait TÜM STOK GEÇMİŞİ VE HAREKETLERİ de silinecektir.\n\nBu işlem geri alınamaz. Devam etmek istiyor musunuz?')) {
+                try {
+                    const token = localStorage.getItem('token');
+                    await axios.delete(`/api/inventory/products/${id}`, {
+                        headers: {
+                            Authorization: `Bearer ${token}`
+                        }
+                    });
+                    this.fetchProducts(this.pagination.current_page); // Refresh current page
+                } catch (error) {
+                    console.error('Error deleting product:', error);
+                    alert('Silme işlemi başarısız oldu.');
+                }
+            }
+        },
+        async fetchProducts(page = 1) {
             try {
                 const token = localStorage.getItem('token');
-                const response = await axios.get('/api/inventory/products', {
+                const response = await axios.get(`/api/inventory/products?page=${page}`, {
                     headers: {
                         Authorization: `Bearer ${token}`
                     }
                 });
                 if (response.data.success) {
-                    this.products = response.data.data;
+                    this.products = response.data.data.data;
+                    this.pagination = response.data.data;
                 }
             } catch (error) {
                 console.error('Error fetching products:', error);
@@ -105,6 +173,11 @@ export default {
                 }
             }
         }
+        },
+        changePage(page) {
+            if (page >= 1 && page <= this.pagination.last_page) {
+                this.fetchProducts(page);
+            }
+        }
     }
-}
 </script>

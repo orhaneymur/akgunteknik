@@ -40,6 +40,13 @@ class OrderController extends BaseController
             DB::beginTransaction();
 
             $tenantId = $request->user()->tenant_id;
+            // Get tenant's default warehouse
+            $warehouse = \Modules\Core\Models\Warehouse::where('tenant_id', $tenantId)->first();
+            if (!$warehouse) {
+                throw new \Exception('No warehouse found for this tenant.');
+            }
+            $warehouseId = $warehouse->id;
+
             $items = $request->items;
             $totalAmount = 0;
             $orderItemsData = [];
@@ -51,13 +58,15 @@ class OrderController extends BaseController
                     ->lockForUpdate() // Prevent race conditions
                     ->firstOrFail();
 
-                $lineTotal = $product->base_price * $item['quantity'];
+                // Use provided unit_price or fallback to base_price
+                $unitPrice = isset($item['unit_price']) ? $item['unit_price'] : $product->base_price;
+                $lineTotal = $unitPrice * $item['quantity'];
                 $totalAmount += $lineTotal;
 
                 $orderItemsData[] = [
                     'product_id' => $product->id,
                     'quantity' => $item['quantity'],
-                    'unit_price' => $product->base_price,
+                    'unit_price' => $unitPrice,
                     'total_price' => $lineTotal,
                 ];
             }
@@ -79,7 +88,7 @@ class OrderController extends BaseController
                 InventoryMovement::create([
                     'tenant_id' => $tenantId,
                     'product_id' => $itemData['product_id'],
-                    'warehouse_id' => 1, // Assumption: Using Default Warehouse (ID 1) for now
+                    'warehouse_id' => $warehouseId,
                     'quantity' => -1 * $itemData['quantity'], // Negative for deduction
                     'type' => 'sale',
                     'reference_id' => 'ORDER-' . $order->id,
@@ -92,6 +101,8 @@ class OrderController extends BaseController
 
         } catch (\Exception $e) {
             DB::rollBack();
+            // Log the error for debugging
+            \Illuminate\Support\Facades\Log::error('Order Creation Failed: ' . $e->getMessage());
             return $this->respondError(['error' => $e->getMessage()], 'Order creation failed.', 500);
         }
     }

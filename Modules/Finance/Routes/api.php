@@ -12,4 +12,5 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::apiResource('finance/expense-categories', \Modules\Finance\Http\Controllers\ExpenseCategoryController::class);
     Route::apiResource('finance/expenses', \Modules\Finance\Http\Controllers\ExpenseController::class);
     Route::get('finance/transactions', [\Modules\Finance\Http\Controllers\TransactionController::class, 'index']);
+    Route::post('finance/transactions', [\Modules\Finance\Http\Controllers\TransactionController::class, 'store']);
 });

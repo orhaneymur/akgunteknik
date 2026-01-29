@@ -41,9 +41,17 @@ class AuthController extends BaseController
         // Create token
         $token = $user->createToken('api-token')->plainTextToken;
 
-        // Return success response with token
+        // Return success response with token and user info
         return $this->respondSuccess(
-            ['token' => $token],
+            [
+                'token' => $token,
+                'user' => [
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'role' => $user->role,
+                    'tenant_name' => $user->tenant ? $user->tenant->company_name : 'Sistem'
+                ]
+            ],
             'Login success'
         );
     }

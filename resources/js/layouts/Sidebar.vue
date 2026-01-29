@@ -2,7 +2,7 @@
     <div class="flex flex-col flex-shrink-0 w-64 text-white bg-gray-900 transition-all duration-300" :class="{ '-ml-64': !isOpen && isMobile }">
         <!-- Logo Area -->
         <div class="flex items-center justify-center h-16 bg-gray-900 shadow-md">
-            <span class="text-2xl font-bold tracking-wider uppercase text-indigo-400">Has Panel</span>
+            <span class="text-xl font-bold tracking-wider uppercase text-indigo-400 px-2 text-center">{{ tenantName || 'Akgün Teknik' }}</span>
         </div>
 
         <!-- User Profile (Mobile Only - Optional, skipping for now to keep clean) -->
@@ -155,6 +155,18 @@ export default {
                 TruckIcon, ShoppingCartIcon, BanknotesIcon, UsersIcon,
                 DocumentTextIcon, UserGroupIcon, DocumentMagnifyingGlassIcon, TagIcon,
                 CurrencyDollarIcon, ArrowPathRoundedSquareIcon, ChartBarIcon, ArrowUturnLeftIcon
+            },
+            tenantName: ''
+        }
+    },
+    mounted() {
+        const userStr = localStorage.getItem('user');
+        if (userStr) {
+            try {
+                const user = JSON.parse(userStr);
+                this.tenantName = user.tenant_name;
+            } catch (e) {
+                console.error('Error parsing user data', e);
             }
         }
     },

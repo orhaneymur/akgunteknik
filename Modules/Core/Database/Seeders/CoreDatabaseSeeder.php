@@ -11,6 +11,9 @@ class CoreDatabaseSeeder extends Seeder
     /**
      * Seed the application's database with Golden Tenant data.
      */
+    /**
+     * Seed the application's database with Tenant data.
+     */
     public function run(): void
     {
         // Start transaction for data integrity
@@ -18,64 +21,89 @@ class CoreDatabaseSeeder extends Seeder
 
         try {
             // 1. Create Tenant: "Orhan Teknik"
-            $tenant = DB::table('tenants')->insertGetId([
-                'company_name' => 'Orhan Teknik',
-                'domain_prefix' => 'orhanteknik',
-                'is_active' => true,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+            $this->createTenant(
+                'Orhan Teknik',
+                'orhanteknik',
+                'Orhan Admin',
+                'admin@orhanteknik.com',
+                'password'
+            );
 
-            $this->command->info("✓ Tenant created: Orhan Teknik (ID: {$tenant})");
-
-            // 2. Create Warehouse: "Merkez Depo"
-            $warehouse = DB::table('warehouses')->insertGetId([
-                'tenant_id' => $tenant,
-                'name' => 'Merkez Depo',
-                'is_active' => true,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-
-            $this->command->info("✓ Warehouse created: Merkez Depo (ID: {$warehouse})");
-
-            // 3. Create Branch: "Merkez Şube" (linked to warehouse)
-            $branch = DB::table('branches')->insertGetId([
-                'tenant_id' => $tenant,
-                'warehouse_id' => $warehouse,
-                'name' => 'Merkez Şube',
-                'address' => null,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-
-            $this->command->info("✓ Branch created: Merkez Şube (ID: {$branch})");
-
-            // 4. Create Admin User
-            $userId = DB::table('users')->insertGetId([
-                'name' => 'Orhan Admin',
-                'email' => 'admin@orhanteknik.com',
-                'email_verified_at' => now(),
-                'password' => Hash::make('password'),
-                'tenant_id' => $tenant,
-                'branch_id' => $branch,
-                'role' => 'admin',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-
-            $this->command->info("✓ Admin user created: Orhan Admin (ID: {$userId})");
-            $this->command->info("  Email: admin@orhanteknik.com");
-            $this->command->info("  Password: password");
+            // 2. Create Tenant: "Akgün Teknik"
+            $this->createTenant(
+                'Akgün Teknik',
+                'akgunteknik',
+                'Akgün Admin',
+                'admin@akgunteknik.com',
+                'password'
+            );
 
             DB::commit();
-            $this->command->info("\n✅ Golden Tenant seeding completed successfully!");
+            $this->command->info("\n✅ All tenants seeded successfully!");
 
         } catch (\Exception $e) {
             DB::rollBack();
             $this->command->error("❌ Error seeding database: " . $e->getMessage());
             throw $e;
         }
+    }
+
+    /**
+     * Helper to create a full tenant setup.
+     */
+    private function createTenant(string $companyName, string $domainPrefix, string $adminName, string $adminEmail, string $password): void
+    {
+        // Check if tenant exists to avoid duplicates
+        $existingTenant = DB::table('tenants')->where('domain_prefix', $domainPrefix)->first();
+        if ($existingTenant) {
+            $this->command->warn("⚠️ Tenant '{$companyName}' already exists. Skipping...");
+            return;
+        }
+
+        // 1. Create Tenant
+        $tenantId = DB::table('tenants')->insertGetId([
+            'company_name' => $companyName,
+            'domain_prefix' => $domainPrefix,
+            'is_active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->command->info("✓ Tenant created: {$companyName} (ID: {$tenantId})");
+
+        // 2. Create Warehouse
+        $warehouseId = DB::table('warehouses')->insertGetId([
+            'tenant_id' => $tenantId,
+            'name' => 'Merkez Depo',
+            'is_active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // 3. Create Branch
+        $branchId = DB::table('branches')->insertGetId([
+            'tenant_id' => $tenantId,
+            'warehouse_id' => $warehouseId,
+            'name' => 'Merkez Şube',
+            'address' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // 4. Create Admin User
+        $userId = DB::table('users')->insertGetId([
+            'name' => $adminName,
+            'email' => $adminEmail,
+            'email_verified_at' => now(),
+            'password' => Hash::make($password),
+            'tenant_id' => $tenantId,
+            'branch_id' => $branchId,
+            'role' => 'admin',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->command->info("  User created: {$adminName} ({$adminEmail})");
     }
 }
 

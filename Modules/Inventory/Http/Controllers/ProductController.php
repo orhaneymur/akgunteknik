@@ -11,7 +11,18 @@ class ProductController extends BaseController
 {
     public function index(Request $request)
     {
-        $products = Product::with('compatibles')->where('tenant_id', $request->user()->tenant_id)->get();
+        if ($request->has('all')) {
+            $products = Product::where('tenant_id', $request->user()->tenant_id)
+                ->with('compatibles')
+                ->withSum('inventoryMovements as current_stock', 'quantity')
+                ->get();
+            return $this->respondSuccess($products, 'All products retrieved successfully.');
+        }
+
+        $products = Product::with('compatibles')
+            ->where('tenant_id', $request->user()->tenant_id)
+            ->withSum('inventoryMovements as current_stock', 'quantity')
+            ->paginate(15);
         return $this->respondSuccess($products, 'Products retrieved successfully.');
     }
 

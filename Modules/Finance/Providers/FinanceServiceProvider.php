@@ -10,6 +10,7 @@ class FinanceServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->registerRoutes();
+        $this->loadMigrationsFrom(__DIR__ . '/../Database/Migrations');
     }
 
     protected function registerRoutes(): void

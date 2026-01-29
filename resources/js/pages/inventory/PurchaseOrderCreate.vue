@@ -144,7 +144,7 @@ export default {
                 const [suppliersRes, warehousesRes, productsRes] = await Promise.all([
                     axios.get('/api/inventory/suppliers', { headers }),
                     axios.get('/api/core/warehouses', { headers }),
-                    axios.get('/api/inventory/products', { headers })
+                    axios.get('/api/inventory/products?all=true', { headers })
                 ]);
 
                 if (suppliersRes.data.success) this.suppliers = suppliersRes.data.data;

@@ -57,6 +57,7 @@ export default {
                 const response = await axios.post('/api/core/login', this.form);
                 if (response.data.success) {
                     localStorage.setItem('token', response.data.data.token);
+                    localStorage.setItem('user', JSON.stringify(response.data.data.user));
                     this.$router.push('/dashboard');
                 } else {
                     this.error = response.data.message;

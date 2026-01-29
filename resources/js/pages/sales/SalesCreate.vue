@@ -22,8 +22,8 @@
                         <label for="product" class="block text-sm font-medium text-gray-700">Ürün</label>
                         <select id="product" v-model="selectedProductId" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
                             <option value="" disabled>Seçiniz</option>
-                            <option v-for="product in products" :key="product.id" :value="product.id">
-                                {{ product.name }} ({{ product.sku }}) - {{ product.base_price }} ₺
+                            <option v-for="product in products" :key="product.id" :value="product.id" class="flex justify-between" :class="{'text-red-500': !product.current_stock || product.current_stock <= 0}">
+                                {{ product.name }} ({{ product.sku }}) - {{ product.base_price }} ₺ - Stok: {{ product.current_stock || 0 }} {{ (!product.current_stock || product.current_stock <= 0) ? '(Stok Yok)' : '' }}
                             </option>
                         </select>
                         <div v-if="selectedProduct && selectedProduct.compatibles && selectedProduct.compatibles.length > 0" class="mt-2 p-2 bg-yellow-50 rounded border border-yellow-200">
@@ -40,7 +40,10 @@
                         <label for="quantity" class="block text-sm font-medium text-gray-700">Adet</label>
                         <input type="number" id="quantity" v-model.number="quantity" min="1" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md">
                     </div>
-                    <button @click="addToCart" :disabled="!selectedProductId || quantity < 1" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400">
+                    <div v-if="selectedProduct && selectedProduct.current_stock <= 0" class="text-red-600 text-sm mt-1">
+                        Bu ürün stokta yok!
+                    </div>
+                    <button @click="addToCart" :disabled="!selectedProductId || quantity < 1 || (selectedProduct && quantity > selectedProduct.current_stock)" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400">
                         Sepete Ekle
                     </button>
                 </div>
@@ -53,10 +56,15 @@
                     <li v-for="(item, index) in cart" :key="index" class="py-4 flex justify-between">
                         <div>
                             <p class="text-sm font-medium text-gray-900">{{ item.product.name }}</p>
-                            <p class="text-sm text-gray-500">{{ item.quantity }} x {{ item.product.base_price }} ₺</p>
+                            <p class="text-sm text-gray-500">Miktar: {{ item.quantity }}</p>
+                            <div class="flex items-center mt-1">
+                                <span class="text-xs text-gray-500 mr-2">Birim Fiyat:</span>
+                                <input type="number" v-model.number="item.price" min="0" step="0.01" class="w-24 text-sm border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-1">
+                                <span class="ml-1 text-sm text-gray-700">₺</span>
+                            </div>
                         </div>
-                        <div class="flex items-center">
-                            <p class="text-sm font-medium text-gray-900 mr-4">{{ (item.quantity * item.product.base_price).toFixed(2) }} ₺</p>
+                        <div class="flex flex-col items-end">
+                            <p class="text-sm font-medium text-gray-900 mb-2">{{ (item.quantity * item.price).toFixed(2) }} ₺</p>
                             <button @click="removeFromCart(index)" class="text-red-600 hover:text-red-900 text-sm">Sil</button>
                         </div>
                     </li>
@@ -95,7 +103,7 @@ export default {
             return this.products.find(p => p.id === this.selectedProductId);
         },
         totalAmount() {
-            return this.cart.reduce((total, item) => total + (item.quantity * item.product.base_price), 0).toFixed(2);
+            return this.cart.reduce((total, item) => total + (item.quantity * item.price), 0).toFixed(2);
         }
     },
     mounted() {
@@ -119,7 +127,7 @@ export default {
         async fetchProducts() {
             try {
                 const token = localStorage.getItem('token');
-                const response = await axios.get('/api/inventory/products', {
+                const response = await axios.get('/api/inventory/products?all=true', {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 if (response.data.success) {
@@ -140,7 +148,8 @@ export default {
             } else {
                 this.cart.push({
                     product: product,
-                    quantity: this.quantity
+                    quantity: this.quantity,
+                    price: product.base_price // Initialize with base price
                 });
             }
 
@@ -156,7 +165,8 @@ export default {
                 const token = localStorage.getItem('token');
                 const orderItems = this.cart.map(item => ({
                     product_id: item.product.id,
-                    quantity: item.quantity
+                    quantity: item.quantity,
+                    unit_price: item.price // Send custom price
                 }));
 
                 const response = await axios.post('/api/sales/orders', {

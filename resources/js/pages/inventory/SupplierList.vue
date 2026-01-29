@@ -52,6 +52,7 @@
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                     <button @click="openPaymentModal(supplier)" class="text-green-600 hover:text-green-900 mr-4">Ödeme Yap</button>
+                                    <button @click="viewStatement(supplier)" class="text-blue-600 hover:text-blue-900 mr-4">Cari Detay</button>
                                     <button @click="editSupplier(supplier)" class="text-indigo-600 hover:text-indigo-900">Düzenle</button>
                                 </td>
                             </tr>
@@ -213,6 +214,9 @@ export default {
         closePaymentModal() {
             this.showPaymentModal = false;
             this.selectedSupplier = null;
+        },
+        viewStatement(supplier) {
+            this.$router.push({ name: 'SupplierStatement', params: { id: supplier.id } });
         },
         formatCurrency(value) {
             return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(value || 0);
