@@ -1,6 +1,9 @@
 <template>
     <div>
-        <div class="md:grid md:grid-cols-3 md:gap-6">
+        <ErrorAlert :error="error" @dismiss="error = null" />
+        <LoadingSpinner :show="loading" />
+        
+        <div class="md:grid md:grid-cols-3 md:gap-6" v-if="!loading || isEdit">
             <div class="md:col-span-1">
                 <div class="px-4 sm:px-0">
                     <h3 class="text-lg font-medium leading-6 text-gray-900">Müşteri Bilgileri</h3>
@@ -69,10 +72,16 @@
 
 
 <script>
-import axios from 'axios';
-import { useRoute } from 'vue-router';
+import apiClient from '../../api/client.js';
+import toast from '../../utils/toast.js';
+import ErrorAlert from '../../Components/ErrorAlert.vue';
+import LoadingSpinner from '../../Components/LoadingSpinner.vue';
 
 export default {
+    components: {
+        ErrorAlert,
+        LoadingSpinner
+    },
     data() {
         return {
             form: {
@@ -84,7 +93,9 @@ export default {
                 tax_office: '',
                 tax_number: ''
             },
-            isEdit: false
+            isEdit: false,
+            loading: false,
+            error: null
         }
     },
     mounted() {
@@ -96,32 +107,33 @@ export default {
     },
     methods: {
         async fetchCustomer(id) {
-             try {
-                const token = localStorage.getItem('token');
-                const response = await axios.get(`/api/customers/customers/${id}`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
+            this.loading = true;
+            this.error = null;
+            try {
+                const response = await apiClient.get(`/customers/customers/${id}`);
                 if (response.data.success) {
                     this.form = response.data.data;
                 }
             } catch (error) {
                 console.error(error);
-                alert('Müşteri bilgileri yüklenemedi.');
+                this.error = error.response?.data?.message || 'Müşteri bilgileri yüklenemedi.';
+                toast.error(this.error);
+            } finally {
+                this.loading = false;
             }
         },
         async saveCustomer() {
+            this.loading = true;
+            this.error = null;
             try {
-                const token = localStorage.getItem('token');
                 let response;
                 
                 if (this.isEdit) {
-                    response = await axios.put(`/api/customers/customers/${this.form.id}`, this.form, {
-                        headers: { Authorization: `Bearer ${token}` }
-                    });
+                    response = await apiClient.put(`/customers/customers/${this.form.id}`, this.form);
+                    toast.success('Müşteri başarıyla güncellendi.');
                 } else {
-                    response = await axios.post('/api/customers/customers', this.form, {
-                        headers: { Authorization: `Bearer ${token}` }
-                    });
+                    response = await apiClient.post('/customers/customers', this.form);
+                    toast.success('Müşteri başarıyla eklendi.');
                 }
 
                 if (response.data.success) {
@@ -129,7 +141,10 @@ export default {
                 }
             } catch (error) {
                 console.error(error);
-                alert('Kaydetme hatası: ' + (error.response?.data?.message || 'Bilinmeyen hata'));
+                this.error = error.response?.data?.message || 'Kaydetme hatası.';
+                toast.error(this.error);
+            } finally {
+                this.loading = false;
             }
         }
     }

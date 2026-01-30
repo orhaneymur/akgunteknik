@@ -9,5 +9,19 @@ class Tenant extends Model
 {
     use HasFactory;
 
-    protected $guarded = ['id'];
+    protected $fillable = [
+        'company_name',
+        'domain_prefix',
+        'is_active',
+        'tax_number',
+        'tax_office',
+        'address',
+        'phone',
+        'email',
+        'website',
+    ];
+
+    protected $casts = [
+        'is_active' => 'boolean',
+    ];
 }

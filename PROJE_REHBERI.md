@@ -111,4 +111,119 @@ Ekranlarda gördüğünüz tasarımlar buradadır.
 - **Yeni Modül Ekleme:** `Modules/` altına yeni klasör açın, `Routes/api.php` dosyasını oluşturup ana `bootstrap/providers.php` dosyasına servisi tanıtın.
 - **Veritabanı Değişikliği:** Asla doğrudan veritabanına elle müdahale etmeyin. Her zaman `make:migration` komutu ile bir "göç dosyası" oluşturup `artisan migrate` komutunu kullanın. Bu sayede yapılan değişiklikler kaybolmaz.
 
+---
+
+## 🔐 5. Güvenlik ve Yetkilendirme
+
+### Rol Matrisi
+
+Sistemde üç rol seviyesi bulunmaktadır:
+
+| Rol | Açıklama | Erişim Seviyesi |
+|-----|----------|-----------------|
+| **owner** | Firma sahibi/yönetici | Tüm işlemlere erişim (kullanıcı yönetimi dahil) |
+| **manager** | Müdür/yönetici | Finans, satın alma, transfer ve iade işlemleri |
+| **staff** | Personel | Temel satış, müşteri ve ürün işlemleri |
+
+### Endpoint Yetkilendirme
+
+- **Kullanıcı Yönetimi** (`/api/core/users`): Sadece `owner` rolü
+- **Finans İşlemleri** (`/api/finance/*`): `manager` ve üzeri
+- **Satın Alma & Transferler**: `manager` ve üzeri
+- **Satış & Müşteri İşlemleri**: `staff` ve üzeri (tüm kullanıcılar)
+
+### Tenant İzolasyonu
+
+Tüm veriler `tenant_id` ile izole edilmiştir. Kullanıcılar yalnızca kendi firmalarının verilerine erişebilir. Bu kontrol tüm controller'larda otomatik olarak yapılmaktadır.
+
+---
+
+## 📡 6. API Standartları
+
+### Response Formatı
+
+Tüm API endpoint'leri standart bir response formatı kullanır:
+
+```json
+{
+    "success": true,
+    "data": { ... },
+    "message": "İşlem başarılı",
+    "errors": null
+}
+```
+
+**Hata Durumunda:**
+```json
+{
+    "success": false,
+    "data": null,
+    "message": "Hata mesajı",
+    "errors": {
+        "field_name": ["Hata mesajı 1", "Hata mesajı 2"]
+    }
+}
+```
+
+### Authentication
+
+- **Login:** `POST /api/core/login` (public)
+- **Logout:** `POST /api/core/logout` (auth:sanctum)
+- **Token:** Bearer token formatında `Authorization` header'ında gönderilir
+
+### Örnek API İstekleri
+
+**Login:**
+```bash
+POST /api/core/login
+Content-Type: application/json
+
+{
+    "email": "admin@akgunteknik.com",
+    "password": "password"
+}
+```
+
+**Ürün Listesi:**
+```bash
+GET /api/inventory/products
+Authorization: Bearer {token}
+```
+
+**Sipariş Oluşturma:**
+```bash
+POST /api/sales/orders
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+    "customer_id": 1,
+    "items": [
+        {
+            "product_id": 1,
+            "quantity": 2,
+            "unit_price": 100.00
+        }
+    ]
+}
+```
+
+---
+
+## 🧪 7. Testler
+
+Proje PHPUnit ile test edilmektedir. Testleri çalıştırmak için:
+
+```bash
+php artisan test
+```
+
+**Mevcut Testler:**
+- `tests/Feature/AuthTest.php` - Kimlik doğrulama testleri
+- `tests/Feature/ProductTest.php` - Ürün yönetimi testleri
+
+**Test Veritabanı:** Testler SQLite in-memory veritabanı kullanır (otomatik temizlenir).
+
+---
+
 Bu rehber, projenizin yaşayan bir dokümanıdır. Yeni özellikler eklendikçe güncelleyebilirsiniz. Akgün Teknik'e hayırlı olsun! 🎉

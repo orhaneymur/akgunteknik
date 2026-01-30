@@ -46,43 +46,39 @@ class DashboardController extends BaseController
             ->take(5)
             ->get();
 
-        // Low Stock Products
-        $lowStockProducts = [];
-        // Optimized: only fetch needed columns and check relationship count if possible, 
-        // but here we are iterating. For <100 products this is fine.
-        $products = Product::where('tenant_id', $tenantId)->get();
+        // Low Stock Products - Optimized with single query
+        $lowStockProducts = Product::where('tenant_id', $tenantId)
+            ->withSum('inventoryMovements as current_stock', 'quantity')
+            ->having('current_stock', '<', 10)
+            ->orderBy('current_stock')
+            ->limit(5)
+            ->get()
+            ->map(function ($product) {
+                return [
+                    'id' => $product->id,
+                    'name' => $product->name,
+                    'sku' => $product->sku,
+                    'current_stock' => $product->current_stock ?? 0,
+                ];
+            });
 
-        foreach ($products as $product) {
-            // This loop N+1 is bad for large data, but acceptable for MVP with small catalog
-            $stock = $product->inventoryMovements()->sum('quantity');
-            if ($stock < 10) {
-                $product->current_stock = $stock;
-                $lowStockProducts[] = $product;
-            }
-        }
-        $lowStockProducts = array_slice($lowStockProducts, 0, 5);
-
-        // Top Selling (Simplified)
-        $topSelling = DB::table('order_items')
+        // Top Selling - Optimized with single query (no N+1)
+        $topSellingData = DB::table('order_items')
             ->join('orders', 'order_items.order_id', '=', 'orders.id')
+            ->join('products', 'order_items.product_id', '=', 'products.id')
             ->where('orders.tenant_id', $tenantId)
-            ->select('product_id', DB::raw('SUM(quantity) as total_qty'))
-            ->groupBy('product_id')
+            ->whereNull('products.deleted_at') // Exclude soft deleted products
+            ->select('products.name', DB::raw('SUM(order_items.quantity) as total_qty'))
+            ->groupBy('products.id', 'products.name')
             ->orderByDesc('total_qty')
             ->limit(5)
-            ->get();
-
-        // Map product names
-        $topSellingData = [];
-        foreach ($topSelling as $item) {
-            $p = Product::find($item->product_id);
-            if ($p) {
-                $topSellingData[] = [
-                    'name' => $p->name,
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'name' => $item->name,
                     'qty' => $item->total_qty
                 ];
-            }
-        }
+            });
 
         return $this->respondSuccess([
             'total_sales' => $totalSales,

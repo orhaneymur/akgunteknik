@@ -93,6 +93,21 @@ C:\laragon\bin\php\php-8.3.28-Win32-vs16-x64\php.exe artisan route:list
 
 ---
 
+## 💰 5. Döviz Kuru Komutları
+
+### Döviz Kuru Çekme
+```powershell
+# USD kuru çek ve kaydet
+C:\laragon\bin\php\php-8.3.28-Win32-vs16-x64\php.exe artisan exchange-rate:fetch
+
+# Zorla güncelle (bugün için kayıt varsa bile)
+C:\laragon\bin\php\php-8.3.28-Win32-vs16-x64\php.exe artisan exchange-rate:fetch --force
+```
+
+**Not:** Sistem her gün saat 09:00'da otomatik olarak döviz kurunu çeker. Detaylar için `docs/EXCHANGE_RATE_API.md` dosyasına bakın.
+
+---
+
 ## ℹ️ İpucu: Neden Uzun PHP Yolu Yazıyoruz?
 Bilgisayarınızda birden fazla PHP sürümü olabilir. Laragon'un doğru sürümünü (8.3.28) kullandığımızdan emin olmak için `php` yerine `C:\laragon\bin\php\php-8.3.28-Win32-vs16-x64\php.exe` yazıyoruz.
 

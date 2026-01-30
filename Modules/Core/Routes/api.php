@@ -6,6 +6,7 @@ use Modules\Core\Http\Controllers\DashboardController;
 use Modules\Core\Http\Controllers\UserController;
 use Modules\Core\Http\Controllers\WarehouseController;
 use Modules\Core\Http\Controllers\ReportController;
+use Modules\Core\Http\Controllers\TaxRateController;
 
 /*
 |--------------------------------------------------------------------------
@@ -17,10 +18,17 @@ use Modules\Core\Http\Controllers\ReportController;
 |
 */
 
-Route::post('/core/login', [AuthController::class, 'login']);
-Route::middleware(['auth:sanctum'])->post('/core/logout', [AuthController::class, 'logout']);
+// Public routes with rate limiting
+Route::middleware(['throttle:60,1'])->group(function () {
+    Route::post('/core/login', [AuthController::class, 'login']);
+});
 
-Route::middleware(['auth:sanctum'])->group(function () {
+// Authenticated routes with rate limiting
+Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
+    Route::post('/core/logout', [AuthController::class, 'logout']);
+});
+
+Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
     // Genel dashboard ve raporlar - giriş yapmış tüm personel erişebilir (staff seviyesi)
     Route::middleware('role:staff')->group(function () {
         Route::get('/core/dashboard/stats', [DashboardController::class, 'index']);
@@ -28,6 +36,14 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/core/reports/sales', [ReportController::class, 'salesReport']);
         Route::get('/core/reports/stock', [ReportController::class, 'stockReport']);
         Route::get('/core/warehouses', [WarehouseController::class, 'index']); // dropdownlar için
+        Route::get('/core/tax-rates', [TaxRateController::class, 'index']); // KDV oranları için
+        Route::get('/core/exchange-rates', [\Modules\Core\Http\Controllers\ExchangeRateController::class, 'index']); // Döviz kurları
+        Route::get('/core/exchange-rates/latest/{currency}', [\Modules\Core\Http\Controllers\ExchangeRateController::class, 'getLatest']); // Son kur
+    });
+
+    // Döviz kuru ekleme/güncelleme - manager seviyesi
+    Route::middleware('role:manager')->group(function () {
+        Route::post('/core/exchange-rates', [\Modules\Core\Http\Controllers\ExchangeRateController::class, 'store']); // Döviz kuru ekle/güncelle
     });
 
     // Kullanıcı yönetimi sadece tenant sahibi (owner) tarafından yapılabilir

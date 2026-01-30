@@ -5,41 +5,73 @@ namespace Modules\Inventory\Http\Controllers;
 use Illuminate\Http\Request;
 use Modules\Core\Http\Controllers\BaseController;
 use Modules\Inventory\Models\Product;
+use Modules\Inventory\Http\Requests\StoreProductRequest;
 use Illuminate\Support\Facades\Validator;
 
 class ProductController extends BaseController
 {
     public function index(Request $request)
     {
+        $query = Product::where('tenant_id', $request->user()->tenant_id)
+            ->with(['compatibles', 'taxRate', 'category', 'brand', 'model'])
+            ->withSum('inventoryMovements as current_stock', 'quantity');
+
+        // Search functionality
+        if ($request->has('search') && $request->search) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('sku', 'like', "%{$search}%")
+                    ->orWhere('barcode', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%");
+            });
+        }
+
+        // Filter by category
+        if ($request->has('category_id')) {
+            $query->where('category_id', $request->category_id);
+        }
+
+        // Filter by brand
+        if ($request->has('brand_id')) {
+            $query->where('brand_id', $request->brand_id);
+        }
+
+        // Filter by model
+        if ($request->has('model_id')) {
+            $query->where('model_id', $request->model_id);
+        }
+
+        // Filter by active status
+        if ($request->has('is_active')) {
+            $query->where('is_active', $request->is_active);
+        }
+
+        // If 'all' parameter is provided, return all without pagination
         if ($request->has('all')) {
-            $products = Product::where('tenant_id', $request->user()->tenant_id)
-                ->with('compatibles')
-                ->withSum('inventoryMovements as current_stock', 'quantity')
-                ->get();
+            $products = $query->get();
+            // Add available_stock to each product
+            $products->each(function ($product) {
+                $product->available_stock = $product->available_stock;
+            });
             return $this->respondSuccess($products, 'All products retrieved successfully.');
         }
 
-        $products = Product::with('compatibles')
-            ->where('tenant_id', $request->user()->tenant_id)
-            ->withSum('inventoryMovements as current_stock', 'quantity')
-            ->paginate(15);
+        // Pagination with default 15 items per page
+        $perPage = $request->input('per_page', 15);
+        $products = $query->paginate($perPage);
+        
+        // Add available_stock to each product
+        $products->getCollection()->each(function ($product) {
+            $product->available_stock = $product->available_stock;
+        });
+        
         return $this->respondSuccess($products, 'Products retrieved successfully.');
     }
 
-    public function store(Request $request)
+    public function store(StoreProductRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
-            'sku' => 'nullable|string|max:255|unique:products,sku,NULL,id,tenant_id,' . $request->user()->tenant_id,
-            'barcode' => 'nullable|string|max:255|unique:products,barcode,NULL,id,tenant_id,' . $request->user()->tenant_id,
-            'base_price' => 'nullable|numeric|min:0',
-            'cost_price' => 'nullable|numeric|min:0',
-            'is_active' => 'boolean',
-        ]);
-
-        if ($validator->fails()) {
-            return $this->respondError($validator->errors(), 'Validation Error', 422);
-        }
+        // Validation is handled by FormRequest
 
         $sku = $request->sku;
         if (empty($sku)) {
@@ -48,6 +80,9 @@ class ProductController extends BaseController
 
         $product = Product::create([
             'tenant_id' => $request->user()->tenant_id,
+            'category_id' => $request->category_id,
+            'brand_id' => $request->brand_id,
+            'model_id' => $request->model_id,
             'name' => $request->name,
             'sku' => $sku,
             'barcode' => $request->barcode,
@@ -55,6 +90,7 @@ class ProductController extends BaseController
             'base_price' => $request->base_price,
             'cost_price' => $request->cost_price ?? 0,
             'is_active' => $request->is_active ?? true,
+            'tax_rate_id' => $request->tax_rate_id,
         ]);
 
         if ($request->has('compatible_ids')) {
@@ -69,11 +105,17 @@ class ProductController extends BaseController
 
     public function show($id)
     {
-        $product = Product::with('compatibles')->where('id', $id)->where('tenant_id', auth()->user()->tenant_id)->first();
+        $product = Product::with(['compatibles', 'taxRate', 'category', 'brand', 'model'])
+            ->where('id', $id)
+            ->where('tenant_id', auth()->user()->tenant_id)
+            ->first();
 
         if (!$product) {
             return $this->respondError([], 'Product not found.', 404);
         }
+
+        // Add available_stock attribute
+        $product->available_stock = $product->available_stock;
 
         return $this->respondSuccess($product, 'Product details retrieved successfully.');
     }
@@ -88,11 +130,15 @@ class ProductController extends BaseController
 
         $validator = Validator::make($request->all(), [
             'name' => 'sometimes|required|string|max:255',
+            'category_id' => 'nullable|exists:product_categories,id',
+            'brand_id' => 'nullable|exists:brands,id',
+            'model_id' => 'nullable|exists:product_models,id',
             'sku' => 'sometimes|nullable|string|max:255|unique:products,sku,' . $id . ',id,tenant_id,' . $request->user()->tenant_id,
             'barcode' => 'nullable|string|max:255|unique:products,barcode,' . $id . ',id,tenant_id,' . $request->user()->tenant_id,
             'base_price' => 'nullable|numeric|min:0',
             'cost_price' => 'nullable|numeric|min:0',
             'is_active' => 'boolean',
+            'tax_rate_id' => 'nullable|exists:tax_rates,id',
         ]);
 
         if ($validator->fails()) {

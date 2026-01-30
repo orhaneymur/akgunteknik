@@ -13,7 +13,7 @@ Uygulamanın çalışması için **iki ayrı terminal** penceresi açık olmalı
 Yeni bir terminal açın ve şu komutları sırasıyla yapıştırın:
 
 ```powershell
-cd C:\Users\orhan.eymur\Desktop\akgunteknik
+cd C:\Users\orhan.eymur\Documents\GitHub\akgunteknik
 C:\laragon\bin\php\php-8.3.28-Win32-vs16-x64\php.exe artisan serve
 ```
 *Ekranda `Server running on [http://127.0.0.1:8000]` yazısını görünce bu pencereyi **açık bırakın**.*
@@ -23,7 +23,7 @@ C:\laragon\bin\php\php-8.3.28-Win32-vs16-x64\php.exe artisan serve
 Yeni bir terminal daha açın ve şunları yapıştırın:
 
 ```powershell
-cd C:\Users\orhan.eymur\Desktop\akgunteknik
+cd C:\Users\orhan.eymur\Documents\GitHub\akgunteknik
 npm run dev
 ```
 *Ekranda `Local: http://localhost:5173/` yazısını görünce bu pencereyi de **açık bırakın**.*
@@ -54,5 +54,5 @@ npm run dev
 
 ---
 
-**Son Güncelleme:** 27 Ocak 2026 (İade Modülü Eklendi)
+**Son Güncelleme:** 29 Ocak 2026 (Yol bilgileri güncellendi, Güvenlik ve Kararlılık iyileştirmeleri tamamlandı)
 

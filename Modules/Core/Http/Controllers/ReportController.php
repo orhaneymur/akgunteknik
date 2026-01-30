@@ -2,61 +2,77 @@
 
 namespace Modules\Core\Http\Controllers;
 
-use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use Modules\Core\Http\Controllers\BaseController;
 use Modules\Sales\Models\Order;
 use Modules\Sales\Models\OrderItem;
 use Modules\Inventory\Models\Product;
+use Modules\Inventory\Models\InventoryMovement;
 use Modules\Finance\Models\Expense;
 
-class ReportController extends Controller
+class ReportController extends BaseController
 {
     /**
      * Get Main Dashboard Stats (Cards)
      */
-    public function dashboardStats()
+    public function dashboardStats(Request $request)
     {
+        $tenantId = $request->user()->tenant_id;
         $startOfMonth = Carbon::now()->startOfMonth();
         $endOfMonth = Carbon::now()->endOfMonth();
 
-        // 1. Total Sales (This Month)
-        // Adjust for multi-tenancy later
-        $salesTotal = Order::whereBetween('date', [$startOfMonth, $endOfMonth])
+        // 1. Total Sales (This Month) - using created_at since there's no date column
+        $salesTotal = Order::where('tenant_id', $tenantId)
+            ->whereBetween('created_at', [$startOfMonth, $endOfMonth])
             ->sum('total_amount') ?? 0;
 
         // 2. Total Expenses (This Month)
-        $expensesTotal = Expense::whereBetween('date', [$startOfMonth, $endOfMonth])
+        $expensesTotal = Expense::where('tenant_id', $tenantId)
+            ->whereBetween('date', [$startOfMonth, $endOfMonth])
             ->sum('amount') ?? 0;
 
-        // 3. Profit (Sales - Expenses - Cost of Goods Sold)
-        // Simplified Profit: Sales - Expenses. Ideally needed COGS (Order Items * Cost Price)
-        // Let's try to calculate COGS if possible, or just Stick to Cash Flow Profit
+        // 3. Profit (Sales - Expenses)
+        // Note: For real Net Profit, we need COGS (Cost of Goods Sold)
         $profit = $salesTotal - $expensesTotal;
 
-        // 4. Low Stock Count
-        $lowStockCount = Product::whereColumn('stock_quantity', '<=', 'min_stock_level')->count();
+        // 4. Low Stock Count (using inventory movements to calculate current stock)
+        $lowStockCount = Product::where('tenant_id', $tenantId)
+            ->withSum('inventoryMovements as current_stock', 'quantity')
+            ->get()
+            ->filter(function ($product) {
+                return ($product->current_stock ?? 0) < 10; // Critical level threshold
+            })
+            ->count();
 
         // 5. Open Orders
-        $openOrders = Order::where('status', 'pending')->count();
+        $openOrders = Order::where('tenant_id', $tenantId)
+            ->where('status', 'pending')
+            ->count();
 
         // 6. Chart Data (Last 7 Days Sales)
         $last7Days = collect();
         for ($i = 6; $i >= 0; $i--) {
-            $date = Carbon::now()->subDays($i)->format('Y-m-d');
-            $dailySales = Order::whereDate('date', $date)->sum('total_amount');
-            $last7Days->push(['date' => $date, 'total' => $dailySales]);
+            $date = Carbon::now()->subDays($i)->startOfDay();
+            $nextDate = $date->copy()->endOfDay();
+            $dailySales = Order::where('tenant_id', $tenantId)
+                ->whereBetween('created_at', [$date, $nextDate])
+                ->sum('total_amount') ?? 0;
+            $last7Days->push([
+                'date' => $date->format('Y-m-d'),
+                'total' => $dailySales
+            ]);
         }
 
-        return response()->json([
+        return $this->respondSuccess([
             'sales_month' => $salesTotal,
             'expenses_month' => $expensesTotal,
-            'profit_month' => $profit, // Need to implement COGS for real Net Profit
+            'profit_month' => $profit,
             'low_stock_count' => $lowStockCount,
             'open_orders_count' => $openOrders,
             'daily_sales' => $last7Days
-        ]);
+        ], 'Dashboard stats retrieved successfully.');
     }
 
     /**
@@ -64,19 +80,25 @@ class ReportController extends Controller
      */
     public function salesReport(Request $request)
     {
+        $tenantId = $request->user()->tenant_id;
         $startDate = $request->input('start_date', Carbon::now()->startOfMonth()->format('Y-m-d'));
         $endDate = $request->input('end_date', Carbon::now()->endOfMonth()->format('Y-m-d'));
 
-        // Group by Date
-        $salesByDate = Order::whereBetween('date', [$startDate, $endDate])
-            ->selectRaw('date, count(*) as count, sum(total_amount) as total')
+        $startDateTime = Carbon::parse($startDate)->startOfDay();
+        $endDateTime = Carbon::parse($endDate)->endOfDay();
+
+        // Group by Date (using created_at)
+        $salesByDate = Order::where('tenant_id', $tenantId)
+            ->whereBetween('created_at', [$startDateTime, $endDateTime])
+            ->selectRaw('DATE(created_at) as date, count(*) as count, sum(total_amount) as total')
             ->groupBy('date')
             ->orderBy('date')
             ->get();
 
         // Top Selling Products in Range
-        $topProducts = OrderItem::whereHas('order', function ($q) use ($startDate, $endDate) {
-            $q->whereBetween('date', [$startDate, $endDate]);
+        $topProducts = OrderItem::whereHas('order', function ($q) use ($tenantId, $startDateTime, $endDateTime) {
+            $q->where('tenant_id', $tenantId)
+                ->whereBetween('created_at', [$startDateTime, $endDateTime]);
         })
             ->selectRaw('product_id, sum(quantity) as total_qty, sum(total_price) as total_revenue')
             ->groupBy('product_id')
@@ -85,35 +107,69 @@ class ReportController extends Controller
             ->limit(10)
             ->get();
 
-        return response()->json([
+        return $this->respondSuccess([
             'sales_by_date' => $salesByDate,
             'top_products' => $topProducts
-        ]);
+        ], 'Sales report retrieved successfully.');
     }
 
     /**
      * Detailed Stock Report
      */
-    public function stockReport()
+    public function stockReport(Request $request)
     {
-        // 1. Critical Stock
-        $criticalStock = Product::whereColumn('stock_quantity', '<=', 'min_stock_level')
-            ->orderBy('stock_quantity')
+        $tenantId = $request->user()->tenant_id;
+
+        // Get all products with current stock calculated from inventory movements
+        $products = Product::where('tenant_id', $tenantId)
+            ->withSum('inventoryMovements as current_stock', 'quantity')
             ->get();
 
-        // 2. Stock Value (Quantity * Cost Price)
-        $totalStockValue = Product::selectRaw('sum(stock_quantity * cost_price) as total_value')->value('total_value');
+        // 1. Critical Stock (current_stock < 10)
+        $criticalStock = $products->filter(function ($product) {
+            return ($product->current_stock ?? 0) < 10;
+        })
+            ->sortBy('current_stock')
+            ->take(10)
+            ->values()
+            ->map(function ($product) {
+                return [
+                    'id' => $product->id,
+                    'name' => $product->name,
+                    'sku' => $product->sku,
+                    'current_stock' => $product->current_stock ?? 0,
+                    'cost_price' => $product->cost_price ?? 0,
+                ];
+            });
+
+        // 2. Total Stock Value (Quantity * Cost Price)
+        $totalStockValue = $products->sum(function ($product) {
+            $stock = $product->current_stock ?? 0;
+            $cost = $product->cost_price ?? 0;
+            return $stock * $cost;
+        });
 
         // 3. Most Stocked Items (value wise)
-        $topValueStock = Product::selectRaw('id, name, stock_quantity, cost_price, (stock_quantity * cost_price) as total_value')
-            ->orderByDesc('total_value')
-            ->limit(10)
-            ->get();
+        $topValueStock = $products->map(function ($product) {
+            $stock = $product->current_stock ?? 0;
+            $cost = $product->cost_price ?? 0;
+            return [
+                'id' => $product->id,
+                'name' => $product->name,
+                'sku' => $product->sku,
+                'current_stock' => $stock,
+                'cost_price' => $cost,
+                'total_value' => $stock * $cost,
+            ];
+        })
+            ->sortByDesc('total_value')
+            ->take(10)
+            ->values();
 
-        return response()->json([
+        return $this->respondSuccess([
             'critical_stock' => $criticalStock,
-            'total_stock_value' => $totalStockValue ?? 0,
+            'total_stock_value' => $totalStockValue,
             'top_value_stock' => $topValueStock
-        ]);
+        ], 'Stock report retrieved successfully.');
     }
 }

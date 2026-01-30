@@ -6,6 +6,10 @@
             </h2>
         </div>
 
+        <ErrorAlert :error="error" @dismiss="error = null" />
+
+        <LoadingSpinner :show="loading" />
+
         <!-- Filters -->
         <div class="bg-white shadow px-4 py-5 sm:rounded-lg sm:p-6">
             <div class="md:grid md:grid-cols-3 md:gap-6">
@@ -132,9 +136,15 @@
 </template>
 
 <script>
-import axios from 'axios';
+import apiClient from '../../api/client.js';
+import ErrorAlert from '../../Components/ErrorAlert.vue';
+import LoadingSpinner from '../../Components/LoadingSpinner.vue';
 
 export default {
+    components: {
+        ErrorAlert,
+        LoadingSpinner,
+    },
     data() {
         return {
             movements: {
@@ -145,7 +155,9 @@ export default {
             filters: {
                 product_id: '',
                 type: ''
-            }
+            },
+            loading: false,
+            error: null
         };
     },
     mounted() {
@@ -154,25 +166,23 @@ export default {
     },
     methods: {
         async fetchProducts() {
-             try {
-                const token = localStorage.getItem('token');
-                const response = await axios.get('/api/inventory/products?all=true', {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
+            this.error = null;
+            try {
+                const response = await apiClient.get('/inventory/products?all=true');
                 if (response.data.success) {
                     this.products = response.data.data;
                 }
             } catch (err) {
                 console.error(err);
+                this.error = 'Ürünler yüklenirken bir hata oluştu.';
             }
         },
         async fetchMovements(url = null) {
+            this.loading = true;
+            this.error = null;
             try {
-                const token = localStorage.getItem('token');
-                const pageUrl = url || '/api/inventory/movements';
-                
-                const response = await axios.get(pageUrl, {
-                    headers: { Authorization: `Bearer ${token}` },
+                const pageUrl = url || '/inventory/movements';
+                const response = await apiClient.get(pageUrl, {
                     params: this.filters
                 });
                 
@@ -181,6 +191,9 @@ export default {
                 }
             } catch (error) {
                 console.error('Error fetching movements:', error);
+                this.error = error.response?.data?.message || 'Hareketler yüklenirken bir hata oluştu.';
+            } finally {
+                this.loading = false;
             }
         },
         formatDate(dateString) {

@@ -5,6 +5,7 @@ namespace Modules\Core\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Modules\Core\Http\Controllers\BaseController;
+use Modules\Core\Models\Warehouse;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 
@@ -21,11 +22,19 @@ class UserController extends BaseController
 
     public function store(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        $tenantId = $request->user()->tenant_id;
+        
+        // Convert empty string to null for warehouse_id
+        $data = $request->all();
+        if (isset($data['warehouse_id']) && $data['warehouse_id'] === '') {
+            $data['warehouse_id'] = null;
+        }
+
+        $validator = Validator::make($data, [
             'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
+            'email' => 'required|string|email|max:255|unique:users,email,NULL,id,tenant_id,' . $tenantId,
             'password' => 'required|string|min:8',
-            'role' => 'required|in:owner,manager,staff',
+            'role' => 'required|in:owner,admin,manager,staff',
             'warehouse_id' => 'nullable|exists:warehouses,id',
         ]);
 
@@ -33,13 +42,24 @@ class UserController extends BaseController
             return $this->respondError($validator->errors(), 'Validation Error', 422);
         }
 
+        // Validate warehouse belongs to tenant
+        if ($data['warehouse_id']) {
+            $warehouse = Warehouse::where('id', $data['warehouse_id'])
+                ->where('tenant_id', $tenantId)
+                ->first();
+            
+            if (!$warehouse) {
+                return $this->respondError(['warehouse_id' => ['Selected warehouse does not belong to your tenant.']], 'Validation Error', 422);
+            }
+        }
+
         $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-            'role' => $request->role,
-            'warehouse_id' => $request->warehouse_id,
-            'tenant_id' => $request->user()->tenant_id,
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'password' => Hash::make($data['password']),
+            'role' => $data['role'],
+            'warehouse_id' => $data['warehouse_id'],
+            'tenant_id' => $tenantId,
         ]);
 
         return $this->respondSuccess($user, 'User created successfully.', 201);
@@ -60,19 +80,26 @@ class UserController extends BaseController
 
     public function update(Request $request, $id)
     {
+        $tenantId = $request->user()->tenant_id;
         $user = User::where('id', $id)
-            ->where('tenant_id', $request->user()->tenant_id)
+            ->where('tenant_id', $tenantId)
             ->first();
 
         if (!$user) {
             return $this->respondError([], 'User not found.', 404);
         }
 
-        $validator = Validator::make($request->all(), [
+        // Convert empty string to null for warehouse_id
+        $data = $request->all();
+        if (isset($data['warehouse_id']) && $data['warehouse_id'] === '') {
+            $data['warehouse_id'] = null;
+        }
+
+        $validator = Validator::make($data, [
             'name' => 'sometimes|string|max:255',
-            'email' => 'sometimes|string|email|max:255|unique:users,email,' . $user->id,
+            'email' => 'sometimes|string|email|max:255|unique:users,email,' . $user->id . ',id,tenant_id,' . $tenantId,
             'password' => 'nullable|string|min:8',
-            'role' => 'sometimes|in:owner,manager,staff',
+            'role' => 'sometimes|in:owner,admin,manager,staff',
             'warehouse_id' => 'nullable|exists:warehouses,id',
         ]);
 
@@ -80,12 +107,13 @@ class UserController extends BaseController
             return $this->respondError($validator->errors(), 'Validation Error', 422);
         }
 
-        $data = $request->except(['password']);
+        $updateData = $data;
+        unset($updateData['password']);
         if ($request->filled('password')) {
-            $data['password'] = Hash::make($request->password);
+            $updateData['password'] = Hash::make($request->password);
         }
 
-        $user->update($data);
+        $user->update($updateData);
 
         return $this->respondSuccess($user, 'User updated successfully.');
     }

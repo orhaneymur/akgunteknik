@@ -98,7 +98,7 @@ class CoreDatabaseSeeder extends Seeder
             'password' => Hash::make($password),
             'tenant_id' => $tenantId,
             'branch_id' => $branchId,
-            'role' => 'admin',
+            'role' => 'owner', // Changed from 'admin' to 'owner' for consistency
             'created_at' => now(),
             'updated_at' => now(),
         ]);

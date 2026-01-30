@@ -1,5 +1,8 @@
 <template>
   <div class="space-y-6">
+    <ErrorAlert :error="error" @dismiss="error = null" />
+    <LoadingSpinner :show="loading" />
+    
     <!-- Header -->
     <div class="flex justify-between items-center bg-white p-4 rounded-lg shadow-sm border border-gray-200">
       <div>
@@ -30,16 +33,22 @@
 </template>
 
 <script>
-import axios from 'axios';
+import apiClient from '../../api/client.js';
+import ErrorAlert from '../../Components/ErrorAlert.vue';
+import LoadingSpinner from '../../Components/LoadingSpinner.vue';
 import TransactionList from '../../components/TransactionList.vue';
 
 export default {
   components: {
-    TransactionList
+    TransactionList,
+    ErrorAlert,
+    LoadingSpinner
   },
   data() {
     return {
-      customer: null
+      customer: null,
+      loading: false,
+      error: null
     }
   },
   async mounted() {
@@ -48,13 +57,18 @@ export default {
   },
   methods: {
     async fetchCustomer(id) {
+      this.loading = true;
+      this.error = null;
       try {
-        // Need to make sure we show the correct endpoint. 
-        // Previously used 'customers/:id/edit' which uses show method.
-        const response = await axios.get(`/api/customers/${id}`);
-        this.customer = response.data;
+        const response = await apiClient.get(`/customers/customers/${id}`);
+        if (response.data.success) {
+          this.customer = response.data.data;
+        }
       } catch (error) {
         console.error('Error fetching customer:', error);
+        this.error = error.response?.data?.message || 'Müşteri bilgileri yüklenemedi.';
+      } finally {
+        this.loading = false;
       }
     }
   }

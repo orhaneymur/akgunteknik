@@ -1,6 +1,9 @@
 <template>
     <div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div class="md:grid md:grid-cols-3 md:gap-6">
+        <ErrorAlert :error="error" @dismiss="error = null" />
+        <LoadingSpinner :show="loading" />
+        
+        <div class="md:grid md:grid-cols-3 md:gap-6" v-if="!loading || isEdit">
             <div class="md:col-span-1">
                 <div class="px-4 sm:px-0">
                     <h3 class="text-lg font-medium leading-6 text-gray-900">Personel Bilgileri</h3>
@@ -64,9 +67,16 @@
 </template>
 
 <script>
-import axios from 'axios';
+import apiClient from '../../api/client.js';
+import toast from '../../utils/toast.js';
+import ErrorAlert from '../../Components/ErrorAlert.vue';
+import LoadingSpinner from '../../Components/LoadingSpinner.vue';
 
 export default {
+    components: {
+        ErrorAlert,
+        LoadingSpinner
+    },
     data() {
         return {
             form: {
@@ -77,7 +87,9 @@ export default {
                 warehouse_id: '',
             },
             warehouses: [],
-            isEdit: false
+            isEdit: false,
+            loading: false,
+            error: null
         }
     },
     mounted() {
@@ -86,28 +98,44 @@ export default {
     },
     methods: {
         async fetchWarehouses() {
-             try {
-                const token = localStorage.getItem('token');
-                const response = await axios.get('/api/core/warehouses', {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
+            this.error = null;
+            try {
+                const response = await apiClient.get('/core/warehouses');
                 if (response.data.success) {
                     this.warehouses = response.data.data;
                 }
             } catch (err) {
                 console.error(err);
+                this.error = 'Depolar yüklenirken bir hata oluştu.';
             }
         },
         async submitForm() {
+            this.loading = true;
+            this.error = null;
             try {
-                const token = localStorage.getItem('token');
-                await axios.post('/api/core/users', this.form, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
+                // Prepare form data - convert empty strings to null
+                const formData = {
+                    ...this.form,
+                    warehouse_id: this.form.warehouse_id === '' ? null : this.form.warehouse_id
+                };
+                
+                await apiClient.post('/core/users', formData);
+                toast.success('Kullanıcı başarıyla oluşturuldu.');
                 this.$router.push('/users');
             } catch (error) {
                 console.error(error);
-                alert('Kaydetme hatası: ' + (error.response?.data?.message || 'Bilinmeyen hata'));
+                // Show validation errors if available
+                if (error.response?.data?.errors) {
+                    const errors = error.response.data.errors;
+                    const errorMessages = Object.values(errors).flat();
+                    this.error = errorMessages.join(', ');
+                    toast.error(errorMessages[0] || 'Kaydetme hatası.');
+                } else {
+                    this.error = error.response?.data?.message || 'Kaydetme hatası.';
+                    toast.error(this.error);
+                }
+            } finally {
+                this.loading = false;
             }
         }
     }

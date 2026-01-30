@@ -58,7 +58,7 @@ class User extends Authenticatable
     public function isOwner()
     {
         // For now, tenant admin is owner. Later we might have super_admin for the platform.
-        return $this->role === 'owner';
+        return $this->role === 'owner' || $this->role === 'admin';
     }
 
     public function isManager()

@@ -121,6 +121,21 @@ const routes = [
                 component: () => import('./pages/inventory/ProductForm.vue')
             },
             {
+                path: 'product-categories',
+                name: 'ProductCategoryList',
+                component: () => import('./pages/inventory/ProductCategoryList.vue')
+            },
+            {
+                path: 'brands',
+                name: 'BrandList',
+                component: () => import('./pages/inventory/BrandList.vue')
+            },
+            {
+                path: 'product-models',
+                name: 'ProductModelList',
+                component: () => import('./pages/inventory/ProductModelList.vue')
+            },
+            {
                 path: 'returns',
                 name: 'ReturnList',
                 component: () => import('./pages/returns/ReturnList.vue')
@@ -188,11 +203,27 @@ const router = createRouter({
 // Navigation Guard
 router.beforeEach((to, from, next) => {
     const token = localStorage.getItem('token');
-    if (to.name !== 'Login' && !token) {
-        next({ name: 'Login' });
-    } else {
-        next();
+    const user = localStorage.getItem('user');
+
+    // Public route (login page)
+    if (to.name === 'Login') {
+        // If already logged in, redirect to dashboard
+        if (token && user) {
+            next({ name: 'Dashboard' });
+        } else {
+            next();
+        }
+        return;
     }
+
+    // Protected routes - require authentication
+    if (!token || !user) {
+        next({ name: 'Login' });
+        return;
+    }
+
+    // All checks passed
+    next();
 });
 
 export default router;

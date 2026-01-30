@@ -4,6 +4,9 @@
             Yeni Satış Oluştur
         </h2>
 
+        <ErrorAlert :error="error" @dismiss="error = null" />
+        <LoadingSpinner :show="loading" />
+        
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div class="bg-white shadow sm:rounded-lg p-6">
                 <h3 class="text-lg font-medium text-gray-900 mb-4">Sipariş Detayları</h3>
@@ -22,8 +25,8 @@
                         <label for="product" class="block text-sm font-medium text-gray-700">Ürün</label>
                         <select id="product" v-model="selectedProductId" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
                             <option value="" disabled>Seçiniz</option>
-                            <option v-for="product in products" :key="product.id" :value="product.id" class="flex justify-between" :class="{'text-red-500': !product.current_stock || product.current_stock <= 0}">
-                                {{ product.name }} ({{ product.sku }}) - {{ product.base_price }} ₺ - Stok: {{ product.current_stock || 0 }} {{ (!product.current_stock || product.current_stock <= 0) ? '(Stok Yok)' : '' }}
+                            <option v-for="product in products" :key="product.id" :value="product.id" :class="{'text-red-500': !product.available_stock || product.available_stock <= 0}">
+                                {{ product.name }} ({{ product.sku }}) - {{ product.base_price }} ₺ - Stok: {{ product.available_stock || 0 }} {{ (!product.available_stock || product.available_stock <= 0) ? '(Stok Yok)' : '' }}
                             </option>
                         </select>
                         <div v-if="selectedProduct && selectedProduct.compatibles && selectedProduct.compatibles.length > 0" class="mt-2 p-2 bg-yellow-50 rounded border border-yellow-200">
@@ -40,10 +43,10 @@
                         <label for="quantity" class="block text-sm font-medium text-gray-700">Adet</label>
                         <input type="number" id="quantity" v-model.number="quantity" min="1" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md">
                     </div>
-                    <div v-if="selectedProduct && selectedProduct.current_stock <= 0" class="text-red-600 text-sm mt-1">
+                    <div v-if="selectedProduct && selectedProduct.available_stock <= 0" class="text-red-600 text-sm mt-1">
                         Bu ürün stokta yok!
                     </div>
-                    <button @click="addToCart" :disabled="!selectedProductId || quantity < 1 || (selectedProduct && quantity > selectedProduct.current_stock)" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400">
+                    <button @click="addToCart" :disabled="!selectedProductId || quantity < 1 || (selectedProduct && quantity > selectedProduct.available_stock)" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400">
                         Sepete Ekle
                     </button>
                 </div>
@@ -85,9 +88,16 @@
 </template>
 
 <script>
-import axios from 'axios';
+import apiClient from '../../api/client.js';
+import ErrorAlert from '../../Components/ErrorAlert.vue';
+import LoadingSpinner from '../../Components/LoadingSpinner.vue';
+import toast from '../../utils/toast.js';
 
 export default {
+    components: {
+        ErrorAlert,
+        LoadingSpinner
+    },
     data() {
         return {
             products: [],
@@ -95,7 +105,9 @@ export default {
             selectedProductId: '',
             selectedCustomerId: '',
             quantity: 1,
-            cart: []
+            cart: [],
+            loading: false,
+            error: null
         }
     },
     computed: {
@@ -112,30 +124,46 @@ export default {
     },
     methods: {
         async fetchCustomers() {
+            this.error = null;
             try {
-                const token = localStorage.getItem('token');
-                const response = await axios.get('/api/customers/customers', {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
+                const response = await apiClient.get('/customers/customers?all=true');
                 if (response.data.success) {
-                    this.customers = response.data.data;
+                    this.customers = Array.isArray(response.data.data) ? response.data.data : [];
                 }
             } catch (err) {
-                console.error(err);
+                console.error('Müşteri yükleme hatası:', err);
+                this.error = 'Müşteriler yüklenirken bir hata oluştu.';
+                toast.error('Müşteriler yüklenemedi.');
             }
         },
         async fetchProducts() {
+            this.loading = true;
+            this.error = null;
             try {
-                const token = localStorage.getItem('token');
-                const response = await axios.get('/api/inventory/products?all=true', {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
+                const response = await apiClient.get('/inventory/products?all=true');
                 if (response.data.success) {
                     // Only show active products
-                    this.products = response.data.data.filter(p => p.is_active);
+                    this.products = Array.isArray(response.data.data) 
+                        ? response.data.data.filter(p => p.is_active)
+                        : [];
+                    
+                    // Products already have compatibles and available_stock from API
+                    // Ensure available_stock is set (fallback to 0 if not)
+                    this.products.forEach(product => {
+                        if (!product.available_stock && product.available_stock !== 0) {
+                            product.available_stock = product.current_stock || 0;
+                        }
+                        if (!product.compatibles) {
+                            product.compatibles = [];
+                        }
+                    });
                 }
             } catch (err) {
-                console.error(err);
+                console.error('Ürün yükleme hatası:', err);
+                this.error = 'Ürünler yüklenirken bir hata oluştu.';
+                toast.error('Ürünler yüklenemedi.');
+            } finally {
+                this.loading = false;
             }
         },
         addToCart() {
@@ -161,29 +189,36 @@ export default {
             this.cart.splice(index, 1);
         },
         async completeSale() {
+            this.loading = true;
+            this.error = null;
             try {
-                const token = localStorage.getItem('token');
                 const orderItems = this.cart.map(item => ({
                     product_id: item.product.id,
                     quantity: item.quantity,
                     unit_price: item.price // Send custom price
                 }));
 
-                const response = await axios.post('/api/sales/orders', {
+                const response = await apiClient.post('/sales/orders', {
                     items: orderItems,
                     customer_id: this.selectedCustomerId || null
-                }, {
-                    headers: { Authorization: `Bearer ${token}` }
                 });
 
                 if (response.data.success) {
-                    alert('Satış başarıyla tamamlandı!');
+                    toast.success('Satış başarıyla tamamlandı!');
                     this.cart = [];
+                    this.selectedCustomerId = '';
+                    this.selectedProductId = '';
+                    this.quantity = 1;
                     // Optionally redirect to orders list
+                    this.$router.push('/sales');
                 }
             } catch (err) {
-                console.error(err);
-                alert('Satış sırasında bir hata oluştu: ' + (err.response?.data?.message || err.message));
+                console.error('Satış hatası:', err);
+                const errorMsg = err.response?.data?.message || 'Satış sırasında bir hata oluştu.';
+                this.error = errorMsg;
+                toast.error(errorMsg);
+            } finally {
+                this.loading = false;
             }
         }
     }

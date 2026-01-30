@@ -3,6 +3,7 @@
 namespace Modules\Sales\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Modules\Core\Http\Controllers\BaseController;
 use Modules\Sales\Models\Quote;
 use Modules\Sales\Models\Order;
@@ -71,10 +72,24 @@ class QuoteController extends BaseController
             $quote->items()->createMany($quoteItems);
 
             DB::commit();
+
+            Log::info('Quote created', [
+                'quote_id' => $quote->id,
+                'tenant_id' => $request->user()->tenant_id,
+                'customer_id' => $request->customer_id,
+                'total_amount' => $totalAmount,
+                'user_id' => $request->user()->id,
+            ]);
+
             return $this->respondSuccess($quote, 'Quote created successfully.', 201);
 
         } catch (\Exception $e) {
             DB::rollBack();
+            Log::error('Quote creation failed', [
+                'error' => $e->getMessage(),
+                'tenant_id' => $request->user()->tenant_id,
+                'user_id' => $request->user()->id,
+            ]);
             return $this->respondError(['error' => $e->getMessage()], 'Failed to create quote.', 500);
         }
     }
@@ -111,24 +126,53 @@ class QuoteController extends BaseController
         try {
             DB::beginTransaction();
 
+            // Get tenant's default warehouse (consistent with OrderController)
+            $warehouse = \Modules\Core\Models\Warehouse::where('tenant_id', $quote->tenant_id)->first();
+            if (!$warehouse) {
+                throw new \Exception('No warehouse found for this tenant.');
+            }
+            $warehouseId = $warehouse->id;
+
             // Create Order
             $order = Order::create([
                 'tenant_id' => $quote->tenant_id,
                 'customer_id' => $quote->customer_id,
                 'total_amount' => $quote->total_amount,
                 'status' => 'completed',
+                'completed_at' => now(),
             ]);
 
             // Create Order Items and Deduct Stock
             foreach ($quote->items as $qItem) {
+                // Verify product belongs to tenant and lock for update
+                $product = \Modules\Inventory\Models\Product::where('id', $qItem->product_id)
+                    ->where('tenant_id', $quote->tenant_id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                // Check stock availability
+                $currentStock = $product->inventoryMovements()->sum('quantity') ?? 0;
+                if ($currentStock < $qItem->quantity) {
+                    DB::rollBack();
+                    return $this->respondError(
+                        [
+                            'stock' => [
+                                "Ürün '{$product->name}' için yetersiz stok. Mevcut stok: {$currentStock}, İstenen: {$qItem->quantity}"
+                            ]
+                        ],
+                        'Yetersiz stok',
+                        422
+                    );
+                }
+
                 // Deduct Stock
                 \Modules\Inventory\Models\InventoryMovement::create([
                     'tenant_id' => $quote->tenant_id,
                     'product_id' => $qItem->product_id,
-                    'warehouse_id' => 1, // Default warehouse for now
+                    'warehouse_id' => $warehouseId,
                     'quantity' => -$qItem->quantity,
                     'type' => 'sale',
-                    'reference_id' => $order->id
+                    'reference_id' => 'ORDER-' . $order->id,
                 ]);
 
                 // Order Item
@@ -146,10 +190,24 @@ class QuoteController extends BaseController
 
             DB::commit();
 
-            return $this->respondSuccess($order, 'Quote converted to Order successfully.');
+            Log::info('Quote converted to order', [
+                'quote_id' => $quote->id,
+                'order_id' => $order->id,
+                'tenant_id' => $quote->tenant_id,
+                'total_amount' => $quote->total_amount,
+                'user_id' => $request->user()->id,
+            ]);
+
+            return $this->respondSuccess($order->load('items'), 'Quote converted to Order successfully.');
 
         } catch (\Exception $e) {
             DB::rollBack();
+            Log::error('Quote conversion failed', [
+                'quote_id' => $id,
+                'error' => $e->getMessage(),
+                'tenant_id' => $request->user()->tenant_id,
+                'user_id' => $request->user()->id,
+            ]);
             return $this->respondError(['error' => $e->getMessage()], 'Failed to convert quote.', 500);
         }
     }
